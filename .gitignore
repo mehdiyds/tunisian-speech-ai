@@ -1,0 +1,20 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Environment files
+.env
+
+# Generated artifacts (retain directory markers)
+checkpoints/*
+!checkpoints/.gitkeep
+results/*
+!results/.gitkeep
+!results/stt/
+!results/stt/.gitkeep
+!results/tts/
+!results/tts/.gitkeep
+!results/tables/
+!results/tables/.gitkeep
+!results/figures/
+!results/figures/.gitkeep
