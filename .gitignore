@@ -5,6 +5,16 @@ __pycache__/
 # Environment files
 .env
 
-# Generated artifacts
-checkpoints/
-results/
+# Generated artifacts (retain directory markers)
+checkpoints/*
+!checkpoints/.gitkeep
+results/*
+!results/.gitkeep
+!results/stt/
+!results/stt/.gitkeep
+!results/tts/
+!results/tts/.gitkeep
+!results/tables/
+!results/tables/.gitkeep
+!results/figures/
+!results/figures/.gitkeep
