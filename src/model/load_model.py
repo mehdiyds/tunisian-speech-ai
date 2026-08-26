@@ -9,6 +9,16 @@ LANGUAGE = "ar"
 TASK = "transcribe"
 
 
+def _build_fast_processor(feature_extractor: Any, tokenizer: Any) -> Any:
+    """Build a Whisper processor accepting the repository's complete fast tokenizer."""
+    from transformers import WhisperProcessor
+
+    class FastWhisperProcessor(WhisperProcessor):
+        tokenizer_class = "WhisperTokenizerFast"
+
+    return FastWhisperProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+
 @dataclass
 class LoadedWhisper:
     model: Any
@@ -34,11 +44,27 @@ def load_baseline(
 ) -> LoadedWhisper:
     """Load processor and Whisper model, preserving Arabic transcription decoding."""
     import torch
-    from transformers import AutoProcessor, WhisperForConditionalGeneration
+    from transformers import (
+        WhisperFeatureExtractor,
+        WhisperForConditionalGeneration,
+        WhisperProcessor,
+        WhisperTokenizerFast,
+    )
 
     resolved_device = select_device(device)
     dtype = torch.float16 if resolved_device == "cuda" else torch.float32
-    processor = AutoProcessor.from_pretrained(model_id, local_files_only=local_files_only)
+    # The published tokenizer config declares a slow tokenizer without the
+    # vocab.json/merges.txt files required by that class. Its tokenizer.json is
+    # complete, so use the matching fast implementation. ``extra_special_tokens``
+    # is overridden only to bridge a metadata-format difference in Transformers
+    # 4.48; vocabulary and special-token IDs remain those of the published model.
+    feature_extractor = WhisperFeatureExtractor.from_pretrained(
+        model_id, local_files_only=local_files_only
+    )
+    tokenizer = WhisperTokenizerFast.from_pretrained(
+        model_id, local_files_only=local_files_only, extra_special_tokens={}
+    )
+    processor = _build_fast_processor(feature_extractor, tokenizer)
     model = WhisperForConditionalGeneration.from_pretrained(
         model_id, torch_dtype=dtype, local_files_only=local_files_only
     )
@@ -61,4 +87,3 @@ def transcribe_array(loaded: LoadedWhisper, audio, sampling_rate: int = 16_000) 
     with torch.inference_mode():
         tokens = loaded.model.generate(inputs)
     return loaded.processor.batch_decode(tokens, skip_special_tokens=True)[0]
-
