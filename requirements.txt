@@ -1,0 +1,14 @@
+# Install with Python 3.11. PyTorch CUDA wheels are platform-specific; use the
+# official PyTorch selector when CUDA is required, then install this file.
+torch==2.5.1
+torchaudio==2.5.1
+transformers==4.48.3
+accelerate==1.2.1
+peft==0.14.0
+datasets==3.2.0
+evaluate==0.4.3
+jiwer==3.0.5
+soundfile==0.13.0
+PyYAML==6.0.2
+numpy==1.26.4
+# Optional on a supported CUDA environment: bitsandbytes==0.45.0

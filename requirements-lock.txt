@@ -1,0 +1,19 @@
+# Python 3.11 reference lock. CUDA index choice for torch remains host-specific.
+torch==2.5.1
+torchaudio==2.5.1
+transformers==4.48.3
+accelerate==1.2.1
+peft==0.14.0
+datasets==3.2.0
+evaluate==0.4.3
+jiwer==3.0.5
+soundfile==0.13.0
+PyYAML==6.0.2
+huggingface-hub==0.27.1
+tokenizers==0.21.0
+safetensors==0.5.2
+numpy==1.26.4
+pandas==2.2.3
+requests==2.32.3
+tqdm==4.67.1
+
