@@ -9,6 +9,7 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 data/splits/*.json
+data/splits/*.jsonl
 !data/splits/.gitkeep
 *.wav
 *.mp3

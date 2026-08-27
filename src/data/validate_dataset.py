@@ -32,6 +32,11 @@ def validate_records(records: list[dict[str, Any]]) -> list[str]:
             continue
         if not str(record["audio"]).strip() or not str(record["text"]).strip():
             errors.append(f"row {index}: audio and text must be non-empty")
+        audio_path = Path(str(record["audio"]))
+        if not audio_path.is_absolute() and not audio_path.exists():
+            errors.append(f"row {index}: audio path does not exist: {audio_path}")
+        elif audio_path.is_absolute() and not audio_path.exists():
+            errors.append(f"row {index}: audio path does not exist: {audio_path}")
         flattened = " ".join(str(value).lower() for value in record.values())
         if any(marker in flattened for marker in FINAL_TEST_MARKERS):
             errors.append(
