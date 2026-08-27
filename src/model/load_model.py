@@ -71,9 +71,9 @@ def load_baseline(
     model.to(resolved_device)
     model.generation_config.language = LANGUAGE
     model.generation_config.task = TASK
-    model.generation_config.forced_decoder_ids = processor.get_decoder_prompt_ids(
-        language=LANGUAGE, task=TASK
-    )
+    # ``language`` and ``task`` build the decoder prompt in current Transformers.
+    # Keeping forced_decoder_ids as well produces a conflict warning.
+    model.generation_config.forced_decoder_ids = None
     return LoadedWhisper(model=model, processor=processor, device=resolved_device)
 
 
@@ -85,5 +85,5 @@ def transcribe_array(loaded: LoadedWhisper, audio, sampling_rate: int = 16_000) 
         audio, sampling_rate=sampling_rate, return_tensors="pt"
     ).input_features.to(loaded.device)
     with torch.inference_mode():
-        tokens = loaded.model.generate(inputs)
+        tokens = loaded.model.generate(input_features=inputs)
     return loaded.processor.batch_decode(tokens, skip_special_tokens=True)[0]
