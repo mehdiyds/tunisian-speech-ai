@@ -13,12 +13,39 @@ FINAL_TEST_MARKERS = ("final_96", "test_96", "benchmark_96", "external_final")
 
 def read_manifest(path: str | Path) -> list[dict[str, Any]]:
     path = Path(path)
+    text = path.read_text(encoding="utf-8-sig")
     if path.suffix.lower() == ".jsonl":
-        with path.open(encoding="utf-8") as handle:
-            return [json.loads(line) for line in handle if line.strip()]
+        decoder = json.JSONDecoder()
+        records: list[dict[str, Any]] = []
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            position = 0
+            while position < len(line):
+                while position < len(line) and line[position].isspace():
+                    position += 1
+                if position == len(line):
+                    break
+                try:
+                    record, next_position = decoder.raw_decode(line, position)
+                except json.JSONDecodeError as error:
+                    raise ValueError(
+                        f"Invalid JSON in {path} at line {line_number}, "
+                        f"column {error.colno}: {error.msg}"
+                    ) from error
+                if not isinstance(record, dict):
+                    raise ValueError(
+                        f"Manifest record at line {line_number} must be a JSON object."
+                    )
+                records.append(record)
+                position = next_position
+        return records
     if path.suffix.lower() == ".csv":
         with path.open(encoding="utf-8", newline="") as handle:
             return list(csv.DictReader(handle))
+    if path.suffix.lower() == ".json":
+        data = json.loads(text)
+        if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+            raise ValueError("JSON manifest must contain a list of objects.")
+        return data
     raise ValueError("Manifest must be a .jsonl or .csv file.")
 
 

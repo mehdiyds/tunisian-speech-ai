@@ -10,6 +10,8 @@ import argparse
 import json
 import random
 import sys
+from functools import partial
+from types import MethodType
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +71,7 @@ def split_train_dataset(dataset: Dataset, validation_split: float) -> tuple[Data
 def prepare_dataset(dataset: Dataset, processor: Any) -> Dataset:
     dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
     return dataset.map(
-        lambda example: prepare_example(example, processor),
+        partial(prepare_example, processor=processor),
         remove_columns=dataset.column_names,
         desc="Extract Whisper features",
     )
@@ -89,6 +91,17 @@ def compute_metrics(processor: Any):
         }
 
     return metrics
+
+
+def patch_whisper_peft_forward(peft_model: Any) -> None:
+    """Drop PEFT's text-model-only input_ids before calling Whisper."""
+    base_model = peft_model.get_base_model()
+    original_forward = base_model.forward
+
+    def whisper_forward(self: Any, input_ids: Any = None, **kwargs: Any) -> Any:
+        return original_forward(**kwargs)
+
+    base_model.forward = MethodType(whisper_forward, base_model)
 
 
 def main() -> int:
@@ -114,6 +127,7 @@ def main() -> int:
 
     loaded = load_baseline(model_id, args.device)
     model = attach_lora(loaded.model, args.config)
+    patch_whisper_peft_forward(model)
     model.config.use_cache = False
     model.generation_config.language = LANGUAGE
     model.generation_config.task = TASK
@@ -142,7 +156,7 @@ def main() -> int:
         max_steps=args.max_steps,
         fp16=fp16,
         gradient_checkpointing=bool(training.get("gradient_checkpointing", True)),
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         save_strategy="steps",
         eval_steps=max(1, args.logging_steps),
         save_steps=max(1, args.logging_steps),
@@ -170,7 +184,7 @@ def main() -> int:
 
     best_adapter = args.output_dir / "best_adapter"
     best_adapter.mkdir(parents=True, exist_ok=True)
-    trainer.model.save_pretrained(best_adapter)
+    model.save_pretrained(best_adapter)
     loaded.processor.save_pretrained(best_adapter)
     metrics = dict(result.metrics)
     metrics.update(trainer.evaluate())
