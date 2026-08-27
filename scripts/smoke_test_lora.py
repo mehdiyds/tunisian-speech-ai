@@ -7,6 +7,11 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from transformers.models.whisper.modeling_whisper import shift_tokens_right
+
+# Windows PowerShell can otherwise use CP1252 and fail when printing Derja/Arabic.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -48,16 +53,30 @@ def main() -> int:
     model.train()
 
     print(f"4/8 Preprocessing synthetic audio and running {args.steps} training step(s)...")
-    features = loaded.processor(audio, sampling_rate=16_000, return_tensors="pt").input_features
-    labels = loaded.processor.tokenizer(text_target="اختبار تقني").input_ids
-    feature_batch = features.to(loaded.device)
-    label_batch = torch.tensor([labels], device=loaded.device)
+    feature_batch = loaded.processor(audio, sampling_rate=16_000, return_tensors="pt").input_features.to(loaded.device)
+    decoder_batch = loaded.processor.tokenizer(
+        text_target="اختبار تقني",
+        return_tensors="pt",
+        padding=True,
+    )
+    label_batch = decoder_batch["input_ids"].to(loaded.device)
+    decoder_attention_mask = decoder_batch["attention_mask"].to(loaded.device)
+    decoder_input_ids = shift_tokens_right(
+        label_batch,
+        model.model.config.pad_token_id,
+        model.model.config.decoder_start_token_id,
+    )
     optimizer = torch.optim.AdamW(
         (parameter for parameter in model.parameters() if parameter.requires_grad), lr=1e-4
     )
     for step in range(1, args.steps + 1):
         optimizer.zero_grad(set_to_none=True)
-        loss = model(input_features=feature_batch, labels=label_batch).loss
+        loss = model.model(
+            input_features=feature_batch,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            labels=label_batch,
+        ).loss
         loss.backward()
         optimizer.step()
         print(f"  step {step}/{args.steps}: loss={loss.item():.4f}")
