@@ -43,6 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-split", type=float, default=0.1)
     parser.add_argument("--resume-from-checkpoint", type=str, default=None)
     parser.add_argument("--logging-steps", type=int, default=1)
+    parser.add_argument("--eval-steps", type=int, default=None)
+    parser.add_argument("--save-steps", type=int, default=None)
     return parser.parse_args()
 
 
@@ -138,8 +140,8 @@ def main() -> int:
     model.generation_config.task = TASK
     model.generation_config.forced_decoder_ids = None
     if loaded.device == "cuda":
-        model.gradient_checkpointing_enable()
-        model.enable_input_require_grads()
+        model.get_base_model().gradient_checkpointing_enable()
+        model.get_base_model().enable_input_require_grads()
 
     train_dataset = prepare_dataset(train_dataset, loaded.processor)
     validation_dataset = prepare_dataset(validation_dataset, loaded.processor)
@@ -163,8 +165,8 @@ def main() -> int:
         gradient_checkpointing=bool(training.get("gradient_checkpointing", True)),
         eval_strategy="steps",
         save_strategy="steps",
-        eval_steps=max(1, args.logging_steps),
-        save_steps=max(1, args.logging_steps),
+        eval_steps=max(1, args.eval_steps or args.logging_steps),
+        save_steps=max(1, args.save_steps or args.logging_steps),
         logging_steps=max(1, args.logging_steps),
         save_total_limit=2,
         load_best_model_at_end=True,

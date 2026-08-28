@@ -34,5 +34,6 @@ class WhisperDataCollator:
         batch["labels"] = labels["input_ids"].masked_fill(
             labels.attention_mask.ne(1), -100
         )
+        batch["decoder_attention_mask"] = labels["attention_mask"]
         return {key: value if isinstance(value, torch.Tensor) else value for key, value in batch.items()}
 
