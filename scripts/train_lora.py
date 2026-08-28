@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
 import sys
 from functools import partial
 from pathlib import Path
@@ -169,7 +170,9 @@ def main() -> int:
         save_steps=max(1, args.save_steps or args.logging_steps),
         logging_steps=max(1, args.logging_steps),
         save_total_limit=2,
-        load_best_model_at_end=True,
+        # Trainer's default best-model loader expects pytorch_model.bin. Our
+        # checkpoints intentionally contain adapter weights only.
+        load_best_model_at_end=False,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         predict_with_generate=True,
@@ -195,7 +198,14 @@ def main() -> int:
 
     best_adapter = args.output_dir / "best_adapter"
     best_adapter.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(best_adapter)
+    best_checkpoint = trainer.state.best_model_checkpoint
+    if best_checkpoint is not None:
+        for checkpoint_file in Path(best_checkpoint).glob("adapter_*"):
+            shutil.copy2(checkpoint_file, best_adapter / checkpoint_file.name)
+        print(f"Selected best adapter checkpoint: {best_checkpoint}")
+    else:
+        model.save_pretrained(best_adapter)
+        print("No best checkpoint was recorded; saved the final adapter.")
     loaded.processor.save_pretrained(best_adapter)
     metrics = dict(result.metrics)
     metrics.update(trainer.evaluate())
