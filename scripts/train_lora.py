@@ -11,9 +11,8 @@ import json
 import random
 import sys
 from functools import partial
-from types import MethodType
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -49,7 +48,12 @@ def parse_args() -> argparse.Namespace:
 
 def check_manifest_paths(path: Path) -> None:
     records = load_local_manifest(path)
-    missing = [str(record["audio"]) for record in records if not Path(record["audio"]).exists()]
+    missing = []
+    for record in records:
+        record_dict: dict[str, Any] = dict(record)
+        audio_path = str(record_dict["audio"])
+        if not Path(audio_path).exists():
+            missing.append(audio_path)
     if missing:
         raise FileNotFoundError(f"{len(missing)} audio path(s) are missing; first: {missing[0]}")
 
@@ -87,21 +91,23 @@ def compute_metrics(processor: Any):
         reference_text = processor.batch_decode(labels, skip_special_tokens=True)
         return {
             "wer": float(wer(reference_text, predicted_text)),
-            "cer": float(cer(reference_text, predicted_text)),
+            "cer": cast(float, cer(reference_text, predicted_text)),
         }
 
     return metrics
 
 
-def patch_whisper_peft_forward(peft_model: Any) -> None:
-    """Drop PEFT's text-model-only input_ids before calling Whisper."""
-    base_model = peft_model.get_base_model()
-    original_forward = base_model.forward
+class AdapterSeq2SeqTrainer(Seq2SeqTrainer):
+    """Train Whisper directly while saving only the attached PEFT adapter."""
 
-    def whisper_forward(self: Any, input_ids: Any = None, **kwargs: Any) -> Any:
-        return original_forward(**kwargs)
+    def __init__(self, *args: Any, adapter_model: Any, **kwargs: Any) -> None:
+        self.adapter_model = adapter_model
+        super().__init__(*args, **kwargs)
 
-    base_model.forward = MethodType(whisper_forward, base_model)
+    def save_model(self, output_dir: str | None = None, _internal_call: bool = False) -> None:
+        destination = Path(output_dir or self.args.output_dir)
+        destination.mkdir(parents=True, exist_ok=True)
+        self.adapter_model.save_pretrained(destination)
 
 
 def main() -> int:
@@ -127,7 +133,6 @@ def main() -> int:
 
     loaded = load_baseline(model_id, args.device)
     model = attach_lora(loaded.model, args.config)
-    patch_whisper_peft_forward(model)
     model.config.use_cache = False
     model.generation_config.language = LANGUAGE
     model.generation_config.task = TASK
@@ -170,8 +175,9 @@ def main() -> int:
         remove_unused_columns=False,
         seed=int(training.get("seed", 42)),
     )
-    trainer = Seq2SeqTrainer(
-        model=model,
+    trainer = AdapterSeq2SeqTrainer(
+        model=model.get_base_model(),
+        adapter_model=model,
         args=trainer_args,
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
