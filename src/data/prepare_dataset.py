@@ -17,14 +17,17 @@ def prepare_example(example: dict[str, Any], processor: Any) -> dict[str, Any]:
 class WhisperDataCollator:
     """Pad acoustic features and label tokens while masking label padding with -100."""
 
-    def __init__(self, processor: Any) -> None:
+    def __init__(self, processor: Any, input_dtype: Any = None) -> None:
         self.processor = processor
+        self.input_dtype = input_dtype
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
         import torch
 
         inputs = [{"input_features": item["input_features"]} for item in features]
         batch = self.processor.feature_extractor.pad(inputs, return_tensors="pt")
+        if self.input_dtype is not None:
+            batch["input_features"] = batch["input_features"].to(dtype=self.input_dtype)
         labels = self.processor.tokenizer.pad(
             [{"input_ids": item["labels"]} for item in features], return_tensors="pt"
         )

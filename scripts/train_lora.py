@@ -181,7 +181,10 @@ def main() -> int:
         args=trainer_args,
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
-        data_collator=WhisperDataCollator(loaded.processor),
+        data_collator=WhisperDataCollator(
+            loaded.processor,
+            input_dtype=torch.float16 if loaded.device == "cuda" else torch.float32,
+        ),
         compute_metrics=compute_metrics(loaded.processor),
     )
     set_seed(int(training.get("seed", 42)))
