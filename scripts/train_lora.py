@@ -194,7 +194,9 @@ def main() -> int:
         # Trainer's default best-model loader expects pytorch_model.bin. Our
         # checkpoints intentionally contain adapter weights only.
         load_best_model_at_end=False,
-        metric_for_best_model="eval_loss",
+        # Select the adapter that produces the best transcriptions, rather than
+        # the one with the lowest token-level validation loss.
+        metric_for_best_model="wer",
         greater_is_better=False,
         predict_with_generate=True,
         report_to="none",
