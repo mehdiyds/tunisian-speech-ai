@@ -120,6 +120,7 @@ def main() -> int:
     if args.max_steps == 0 or args.max_steps < -1:
         raise ValueError("--max-steps must be -1 or a positive integer")
 
+    print("1/6 Reading and validating dataset manifests...", flush=True)
     settings = load_lora_settings(args.config)
     model_id = args.model_id or settings["model_id"]
     check_manifest_paths(args.train_manifest)
@@ -134,7 +135,14 @@ def main() -> int:
                 range(min(args.max_validation_samples, len(validation_dataset)))
             )
 
+    print(
+        f"   Dataset ready: {len(train_dataset)} training audio(s), "
+        f"{len(validation_dataset)} validation audio(s).",
+        flush=True,
+    )
+    print(f"2/6 Loading baseline model on {args.device}: {model_id}", flush=True)
     loaded = load_baseline(model_id, args.device)
+    print("3/6 Attaching LoRA adapters and enabling memory-saving options...", flush=True)
     model = attach_lora(loaded.model, args.config)
     model.config.use_cache = False
     model.generation_config.language = LANGUAGE
@@ -144,6 +152,7 @@ def main() -> int:
         model.get_base_model().gradient_checkpointing_enable()
         model.get_base_model().enable_input_require_grads()
 
+    print("4/6 Converting audio to Whisper features (this can take several minutes)...", flush=True)
     train_dataset = prepare_dataset(train_dataset, loaded.processor)
     validation_dataset = prepare_dataset(validation_dataset, loaded.processor)
     summary = parameter_summary(model)
@@ -151,6 +160,18 @@ def main() -> int:
 
     training = settings["training"]
     fp16 = bool(training.get("fp16", True) and loaded.device == "cuda")
+    device_batch = int(training["per_device_train_batch_size"])
+    accumulation = int(training["gradient_accumulation_steps"])
+    updates_per_epoch = max(1, len(train_dataset) // (device_batch * accumulation))
+    total_updates = updates_per_epoch * int(training["num_train_epochs"])
+    print(
+        "5/6 Starting LoRA training: "
+        f"{training['num_train_epochs']} epoch(s), device batch size {device_batch}, "
+        f"gradient accumulation {accumulation} (effective batch size {device_batch * accumulation}).\n"
+        f"   About {updates_per_epoch} optimizer update(s) per epoch, "
+        f"{total_updates} in total. A progress log is printed after every optimizer update.",
+        flush=True,
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     trainer_args = Seq2SeqTrainingArguments(
         output_dir=str(args.output_dir / "checkpoints"),
@@ -196,6 +217,7 @@ def main() -> int:
     resume = args.resume_from_checkpoint
     result = trainer.train(resume_from_checkpoint=resume)
 
+    print("6/6 Training finished. Saving the selected LoRA adapter and metrics...", flush=True)
     best_adapter = args.output_dir / "best_adapter"
     best_adapter.mkdir(parents=True, exist_ok=True)
     best_checkpoint = trainer.state.best_model_checkpoint
